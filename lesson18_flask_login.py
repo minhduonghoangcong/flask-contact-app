@@ -1,12 +1,28 @@
 # -*- coding: utf-8 -*-
+import os
 from flask import Flask, render_template, request, redirect, url_for, flash
 from flask_sqlalchemy import SQLAlchemy
-from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
+from flask_login import (
+    LoginManager, UserMixin, login_user, logout_user,
+    login_required, current_user
+)
 from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
-app.config["SECRET_KEY"] = "dev-secret"  # thay bằng key mạnh ở production
-app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///contacts.db"
+app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-secret")
+
+# ---- Database URL (Postgres ưu tiên, fallback SQLite) ----
+db_url = os.getenv("DATABASE_URL", "sqlite:///contacts.db")
+
+# Chuẩn hoá prefix nếu lỡ là postgres://
+if db_url.startswith("postgres://"):
+    db_url = db_url.replace("postgres://", "postgresql://", 1)
+
+# Thêm sslmode=require nếu dùng Postgres mà chưa có
+if db_url.startswith("postgresql://") and "sslmode=" not in db_url:
+    db_url += ("&" if "?" in db_url else "?") + "sslmode=require"
+
+app.config["SQLALCHEMY_DATABASE_URI"] = db_url
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 db = SQLAlchemy(app)
@@ -15,7 +31,7 @@ db = SQLAlchemy(app)
 class User(UserMixin, db.Model):
     id       = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(50), unique=True, nullable=False)
-    password = db.Column(db.String(255), nullable=False)  # hash
+    password = db.Column(db.String(255), nullable=False)
 
 class Contact(db.Model):
     id   = db.Column(db.Integer, primary_key=True)
@@ -27,7 +43,7 @@ with app.app_context():
 
 # ---------- Login manager ----------
 login_manager = LoginManager(app)
-login_manager.login_view = "login"  # nếu chưa login, chuyển về /login
+login_manager.login_view = "login"
 
 @login_manager.user_loader
 def load_user(user_id):
